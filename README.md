@@ -4,6 +4,9 @@ The website for Adinkra Airways: a single-page app in plain JavaScript modules, 
 Vercel serves the files in `public/` and forwards every `/api/*` request to the API Worker
 ([Adinkra-backend](https://github.com/Ahorsode/Adinkra-backend): Cloudflare Workers + Neon Postgres, Neon Auth and Neon Realtime).
 
+**Live:** https://adinkra-airways.vercel.app. Vercel project `adinkra-airways`, connected to this repo, so every
+push to `main` deploys automatically. `/api/*` goes to https://adinkra-airways-api.ahorsodebenjamindelali.workers.dev.
+
 Because the API goes through the same domain, the session cookie stays first-party (Safari and Chrome
 block cross-site cookies) and no CORS setup is needed.
 
