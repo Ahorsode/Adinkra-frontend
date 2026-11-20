@@ -1,5 +1,5 @@
 import { state, get, route, navigate, renderNav } from './core.js';
-import { home, search, status, schedule, login, register } from './pages/public.js';
+import { home, search, status, schedule, login, register, forgot } from './pages/public.js';
 import { book, pay, bookingPage, manage, trips } from './pages/booking.js';
 import { profile, support, cargo } from './pages/account.js';
 import { staff } from './pages/staff.js';
@@ -28,6 +28,7 @@ route('/support', support, { title: 'Help', auth: true });
 route('/support/:ref', support, { title: 'Support request', auth: true });
 route('/profile', profile, { title: 'My profile', auth: true });
 route('/login', login, { title: 'Sign in' });
+route('/forgot', forgot, { title: 'Reset password' });
 route('/register', register, { title: 'Register' });
 route('/staff', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'] });
 route('/staff/:tab', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'] });

@@ -4,6 +4,7 @@ import {
 } from '../core.js';
 import { AnimatedBackground } from '../animated-background.js';
 import { HERO_BACKGROUND } from '../hero-config.js';
+import { watchLive } from '../live.js';
 
 // ================= Home / search =================
 export async function home(el) {
@@ -197,7 +198,7 @@ export async function search(el, _p, q) {
 // ================= Flight status =================
 export async function status(el, _p, q) {
   el.innerHTML = `
-    <div class="page-head"><div><h1>Live flight status</h1><p>Updated automatically every 30 seconds</p></div></div>
+    <div class="page-head"><div><h1>Live flight status</h1><p id="liveNote" aria-live="polite">Updated automatically every 30 seconds</p></div></div>
     <div class="grid g2">
       <form class="card" id="byNo"><h3>By flight number</h3>
         <div class="form-grid"><div class="field"><label>Flight number</label><input name="flightNo" placeholder="e.g. AD201" value="${esc(q.flightNo || '')}" required></div>
@@ -232,9 +233,26 @@ export async function status(el, _p, q) {
       ${f.live.remarks ? `<p class="note warn" style="margin-top:12px">${esc(f.live.remarks)}</p>` : ''}
     </div>`;
 
+  // Neon Realtime: refresh the moment flight operations change a delay, gate or status.
+  // The 30-second refresh below stays as the fallback whenever live updates are unavailable.
+  const live = { board: 'off', status: 'off' };
+  const showLive = () => {
+    const on = live.board === 'live' && (!lastQuery || live.status === 'live');
+    $('#liveNote').innerHTML = on
+      ? '<span class="live-dot" aria-hidden="true"></span> Live: changes appear the moment our operations team posts them'
+      : 'Updated automatically every 30 seconds';
+  };
+  let stopStatus = null;
+  let stopBoard = null;
+
   let lastQuery = null;
-  const run = async (qs) => {
-    lastQuery = qs;
+  const run = async (qs, { refresh = false } = {}) => {
+    if (!refresh) {
+      lastQuery = qs;
+      stopStatus?.();
+      live.status = 'off';
+      stopStatus = watchLive(`/api/live/status?${qs}`, () => run(qs, { refresh: true }), (s) => { live.status = s; showLive(); });
+    }
     try {
       const d = await get(`/api/flights/status?${qs}`);
       result.innerHTML = d.flights.length ? d.flights.map(statusCard).join('') : '<div class="card empty">No flights found for that search and date.</div>';
@@ -253,15 +271,26 @@ export async function status(el, _p, q) {
   };
   $('#byNo').addEventListener('submit', (e) => { e.preventDefault(); run(new URLSearchParams(formData(e.target))); });
   $('#byRoute').addEventListener('submit', (e) => { e.preventDefault(); run(new URLSearchParams(formData(e.target))); });
+  const watchBoard = () => {
+    stopBoard?.();
+    live.board = 'off';
+    stopBoard = watchLive(`/api/live/board?airport=ACC&type=${boardType}`, loadBoard, (s) => { live.board = s; showLive(); });
+  };
   $$('[data-board]').forEach((b) => b.addEventListener('click', () => {
     boardType = b.dataset.board;
     $$('[data-board]').forEach((x) => x.classList.toggle('on', x === b));
     loadBoard();
+    watchBoard();
   }));
   if (q.flightNo) run(new URLSearchParams({ flightNo: q.flightNo, date: q.date || today() }));
   loadBoard();
-  const timer = setInterval(() => { loadBoard(); if (lastQuery) run(lastQuery); }, 30000);
-  onLeave(() => clearInterval(timer));
+  watchBoard();
+  // Fallback polling, skipped while the live subscriptions are connected.
+  const timer = setInterval(() => {
+    if (live.board !== 'live') loadBoard();
+    if (lastQuery && live.status !== 'live') run(lastQuery, { refresh: true });
+  }, 30000);
+  onLeave(() => { clearInterval(timer); stopBoard?.(); stopStatus?.(); });
 }
 
 // ================= Timetable =================
@@ -287,7 +316,8 @@ export function login(el, _p, q) {
       <form class="card" id="f"><h1>Sign in</h1><p class="muted">Travellers, staff and administrators all sign in here</p>
         <div id="err"></div>
         <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required></div>
-        <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
+        <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+          <div class="hint"><a href="#/forgot">Forgot your password?</a></div></div>
         <button class="btn btn-primary btn-block btn-lg">Sign in</button>
         <p class="small muted" style="margin-top:12px">New to Adinkra Airways? <a href="#/register${q.next ? `?next=${encodeURIComponent(q.next)}` : ''}">Create an account</a></p>
       </form></div>`;
@@ -299,6 +329,48 @@ export function login(el, _p, q) {
     toast(`Welcome back, ${user.name.split(' ')[0] === 'Dr.' ? user.name : user.name.split(' ')[0]}`, 'ok');
     go(q.next || (user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/trips'));
   }, $('#err')));
+}
+
+// Password reset with a 6-digit code emailed by Neon Auth.
+export function forgot(el, _p, q) {
+  el.innerHTML = `
+    <div style="max-width:420px;margin:24px auto">
+      <form class="card" id="ask"><h1>Reset your password</h1>
+        <p class="muted">Enter the email you registered with. We'll email you a 6-digit code.</p>
+        <div id="err1"></div>
+        <div class="field"><label for="femail">Email</label><input id="femail" name="email" type="email" autocomplete="username" value="${esc(q.email || '')}" required></div>
+        <button class="btn btn-primary btn-block btn-lg">Email me a code</button>
+        <p class="small muted" style="margin-top:12px"><a href="#/login">Back to sign in</a></p>
+      </form>
+      <form class="card" id="reset" hidden><h1>Choose a new password</h1>
+        <p class="muted" id="sentTo"></p>
+        <div id="err2"></div>
+        <div class="field"><label for="code">6-digit code</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="\\d{6}" maxlength="6" required></div>
+        <div class="field"><label for="npw">New password</label><input id="npw" name="password" type="password" autocomplete="new-password" minlength="8" required>
+          <div class="hint">At least 8 characters with letters and numbers</div></div>
+        <button class="btn btn-primary btn-block btn-lg">Save new password</button>
+        <p class="small muted" style="margin-top:12px">No email after a few minutes? Check spam, or <a href="#" id="again">send another code</a>.</p>
+      </form></div>`;
+  const ask = $('#ask');
+  const reset = $('#reset');
+  let email = '';
+  const send = async () => {
+    const r = await post('/api/auth/forgot-password', { email });
+    $('#sentTo').textContent = r.message;
+  };
+  ask.addEventListener('submit', guard(ask.querySelector('button'), async () => {
+    email = formData(ask).email.trim();
+    await send();
+    ask.hidden = true;
+    reset.hidden = false;
+    $('#code').focus();
+  }, $('#err1')));
+  $('#again').addEventListener('click', (e) => { e.preventDefault(); send().then(() => toast('New code sent', 'ok')).catch((err) => toast(err.message, 'bad')); });
+  reset.addEventListener('submit', guard(reset.querySelector('button'), async () => {
+    const r = await post('/api/auth/reset-password', { email, ...formData(reset) });
+    toast(r.message, 'ok');
+    go(`/login`);
+  }, $('#err2')));
 }
 
 export function register(el, _p, q) {

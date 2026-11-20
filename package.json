@@ -1,0 +1,15 @@
+{
+  "name": "adinkra-airways-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adinkra Airways website (static, no build step). Vercel serves public/.",
+  "scripts": {
+    "dev": "node dev-server.mjs",
+    "vendor": "esbuild vendor/neon-realtime-entry.js --bundle --format=esm --platform=browser --target=es2020 --minify --legal-comments=eof --outfile=public/vendor/neon-realtime.js"
+  },
+  "devDependencies": {
+    "@neon/realtime": "~0.2.1",
+    "esbuild": "^0.25.0"
+  }
+}
