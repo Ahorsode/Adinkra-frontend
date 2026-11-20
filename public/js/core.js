@@ -198,6 +198,11 @@ export async function navigate() {
       go(`/login?next=${encodeURIComponent(path + (location.hash.includes('?') ? `?${location.hash.split('?')[1]}` : ''))}`);
       return;
     }
+    // Google sign-ups add their phone and Ghana Card before using signed-in pages.
+    if (r.auth && state.user?.needsProfile && path !== '/complete-profile') {
+      go(`/complete-profile?next=${encodeURIComponent(path)}`);
+      return;
+    }
     if (r.roles && !r.roles.includes(state.user?.role)) {
       el.innerHTML = `<div class="card empty"><h2>Restricted area</h2><p>Your account does not have access to this page.</p><a class="btn" href="#/">Go home</a></div>`;
       return;

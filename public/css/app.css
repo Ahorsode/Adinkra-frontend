@@ -513,3 +513,10 @@ main.bleed { max-width: none; padding: 0 0 48px; min-height: calc(100vh - var(--
 .live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--ok); vertical-align: 1px; box-shadow: 0 0 0 0 var(--ok); animation: live-pulse 2s ease-out infinite; }
 @keyframes live-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+
+/* "Continue with Google" (Google sign-in branding: white button, multicolour G) */
+.btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f1f1f; border: 1px solid #747775; font-weight: 500; }
+.btn-google:hover { background: #f2f2f2; }
+.btn-google:focus-visible { outline: 2px solid var(--focus, #1a73e8); outline-offset: 2px; }
+.or-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted, #6b7280); font-size: .85rem; }
+.or-divider::before, .or-divider::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: .3; }

@@ -1,5 +1,5 @@
 import {
-  state, get, post, esc, money, fmtTime, fmtDate, fmtDur, today, airportOptions, city, segBadge, liveBadge, daysChips,
+  state, get, post, put, esc, money, fmtTime, fmtDate, fmtDur, today, airportOptions, city, segBadge, liveBadge, daysChips,
   $, $$, formData, guard, go, toast, onLeave, loading, errorBox, renderNav, SEG_LABEL,
 } from '../core.js';
 import { AnimatedBackground } from '../animated-background.js';
@@ -310,24 +310,78 @@ export async function schedule(el, _p, q) {
 }
 
 // ================= Auth =================
+// "Continue with Google" (Neon Auth social sign-in). Google's sign-in button guidelines: white
+// button, the multicolour G, the words "Continue with Google".
+const G_LOGO = `<svg aria-hidden="true" width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>`;
+const googleButton = (label = 'Continue with Google') => `
+  <button type="button" class="btn btn-google btn-block btn-lg" id="google">${G_LOGO}<span>${label}</span></button>
+  <div class="or-divider" role="separator"><span>or use your email</span></div>`;
+function wireGoogle(next) {
+  const b = $('#google');
+  b.addEventListener('click', guard(b, async () => {
+    const { url } = await post('/api/auth/google', { next: next || '/trips' });
+    location.href = url; // Google, then back to #/oauth-finish
+  }, $('#err')));
+}
+const homeFor = (user, next) => (next || (user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/trips'));
+
+// Landing page after Google: links or creates the Adinkra profile, then continues.
+export async function oauthFinish(el, _p, q) {
+  el.innerHTML = `<div style="max-width:420px;margin:24px auto" class="card">${loading('Finishing Google sign-in…')}</div>`;
+  try {
+    const { user, created } = await post('/api/auth/oauth-finish');
+    state.user = user;
+    renderNav();
+    toast(created ? `Akwaaba, ${user.name.split(' ')[0]}! Your account is ready.` : `Welcome back, ${user.name.split(' ')[0]}`, 'ok');
+    const next = homeFor(user, q.next && q.next !== '/trips' ? q.next : null);
+    go(user.needsProfile ? `/complete-profile?next=${encodeURIComponent(next)}` : next);
+  } catch (e) {
+    el.innerHTML = `<div style="max-width:420px;margin:24px auto" class="card"><h1>Google sign-in</h1>${errorBox(e)}
+      <a class="btn btn-primary" href="#/login">Back to sign in</a></div>`;
+  }
+}
+
+// One-time step for Google sign-ups: the phone and Ghana Card that normal registration collects.
+export function completeProfile(el, _p, q) {
+  el.innerHTML = `
+    <div style="max-width:520px;margin:24px auto">
+      <form class="card" id="f"><h1>Complete your profile</h1>
+        <p class="muted">Welcome${state.user ? `, ${esc(state.user.name.split(' ')[0])}` : ''}! We need two more details before you book.</p>
+        <div id="err"></div>
+        <div class="field"><label for="cphone">Phone</label><input id="cphone" name="phone" type="tel" autocomplete="tel" placeholder="024 123 4567" required></div>
+        <div class="field"><label for="cgc">Ghana Card number</label><input id="cgc" name="nationalId" placeholder="GHA-123456789-0" required pattern="[Gg][Hh][Aa]-\\d{9}-\\d">
+          <div class="hint">Stored encrypted. Used to verify your identity at check-in.</div></div>
+        <button class="btn btn-primary btn-block btn-lg">Save and continue</button>
+      </form></div>`;
+  const f = $('#f');
+  f.addEventListener('submit', guard(f.querySelector('button'), async () => {
+    await put('/api/profile/complete', formData(f));
+    state.user = { ...state.user, needsProfile: false };
+    toast('Profile complete', 'ok');
+    go(q.next || '/trips');
+  }, $('#err')));
+}
+
 export function login(el, _p, q) {
   el.innerHTML = `
     <div style="max-width:420px;margin:24px auto">
       <form class="card" id="f"><h1>Sign in</h1><p class="muted">Travellers, staff and administrators all sign in here</p>
-        <div id="err"></div>
+        <div id="err">${q.error === 'google' ? errorBox('Google sign-in didn’t complete. Please try again, or use your email and password.') : ''}</div>
+        ${googleButton()}
         <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required></div>
         <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
           <div class="hint"><a href="#/forgot">Forgot your password?</a></div></div>
         <button class="btn btn-primary btn-block btn-lg">Sign in</button>
         <p class="small muted" style="margin-top:12px">New to Adinkra Airways? <a href="#/register${q.next ? `?next=${encodeURIComponent(q.next)}` : ''}">Create an account</a></p>
       </form></div>`;
+  wireGoogle(q.next);
   const f = $('#f');
-  f.addEventListener('submit', guard(f.querySelector('button'), async () => {
+  f.addEventListener('submit', guard(f.querySelector('button[type=submit], button:not([type])'), async () => {
     const { user } = await post('/api/auth/login', formData(f));
     state.user = user;
     renderNav();
     toast(`Welcome back, ${user.name.split(' ')[0] === 'Dr.' ? user.name : user.name.split(' ')[0]}`, 'ok');
-    go(q.next || (user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/trips'));
+    go(homeFor(user, q.next));
   }, $('#err')));
 }
 
@@ -378,6 +432,7 @@ export function register(el, _p, q) {
     <div style="max-width:520px;margin:24px auto">
       <form class="card" id="f"><h1>Create your account</h1><p class="muted">Book faster, track trips and earn Adinkra Miles</p>
         <div id="err"></div>
+        ${googleButton('Sign up with Google')}
         <div class="field"><label>Full name</label><input name="name" autocomplete="name" required></div>
         <div class="form-grid">
           <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div>
@@ -390,8 +445,9 @@ export function register(el, _p, q) {
         <button class="btn btn-primary btn-block btn-lg">Register</button>
         <p class="small muted" style="margin-top:12px">Already registered? <a href="#/login${q.next ? `?next=${encodeURIComponent(q.next)}` : ''}">Sign in</a></p>
       </form></div>`;
+  wireGoogle(q.next);
   const f = $('#f');
-  f.addEventListener('submit', guard(f.querySelector('button'), async () => {
+  f.addEventListener('submit', guard(f.querySelector('button:not([type])'), async () => {
     const { user } = await post('/api/auth/register', formData(f));
     state.user = user;
     renderNav();
