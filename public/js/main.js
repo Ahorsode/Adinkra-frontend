@@ -1,4 +1,4 @@
-import { state, get, route, navigate, renderNav } from './core.js';
+import { state, get, route, navigate, renderNav, canSeeStaff } from './core.js';
 import { home, search, status, schedule, login, register, forgot, oauthFinish, completeProfile } from './pages/public.js';
 import { book, pay, bookingPage, manage, trips } from './pages/booking.js';
 import { profile, support, cargo } from './pages/account.js';
@@ -27,14 +27,14 @@ route('/cargo', cargo, { title: 'Cargo' });
 route('/support', support, { title: 'Help', auth: true });
 route('/support/:ref', support, { title: 'Support request', auth: true });
 route('/profile', profile, { title: 'My profile', auth: true });
-route('/login', login, { title: 'Sign in' });
-route('/forgot', forgot, { title: 'Reset password' });
+route('/login', login, { title: 'Sign in', guestOnly: true });
+route('/forgot', forgot, { title: 'Reset password', guestOnly: true });
 route('/oauth-finish', oauthFinish, { title: 'Signing in' });
 route('/complete-profile', completeProfile, { title: 'Complete your profile', auth: true });
-route('/register', register, { title: 'Register' });
-route('/staff', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'] });
-route('/staff/:tab', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'] });
-route('/staff/:tab/:id', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'] });
+route('/register', register, { title: 'Register', guestOnly: true });
+route('/staff', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'], allow: canSeeStaff });
+route('/staff/:tab', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'], allow: canSeeStaff });
+route('/staff/:tab/:id', staff, { title: 'Staff portal', auth: true, roles: ['staff', 'admin'], allow: canSeeStaff });
 route('/admin', admin, { title: 'Administration', auth: true, roles: ['admin'] });
 route('/admin/:tab', admin, { title: 'Administration', auth: true, roles: ['admin'] });
 

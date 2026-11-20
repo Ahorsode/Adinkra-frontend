@@ -1,6 +1,6 @@
 import {
   state, get, post, put, esc, money, fmtTime, fmtDate, fmtDur, today, airportOptions, city, segBadge, liveBadge, daysChips,
-  $, $$, formData, guard, go, toast, onLeave, loading, errorBox, renderNav, SEG_LABEL,
+  $, $$, formData, guard, go, toast, onLeave, loading, errorBox, renderNav, homeFor, SEG_LABEL,
 } from '../core.js';
 import { AnimatedBackground } from '../animated-background.js';
 import { HERO_BACKGROUND } from '../hero-config.js';
@@ -323,7 +323,7 @@ function wireGoogle(next) {
     location.href = url; // Google, then back to #/oauth-finish
   }, $('#err')));
 }
-const homeFor = (user, next) => (next || (user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/trips'));
+const landingFor = (user, next) => next || homeFor(user);
 
 // Landing page after Google: links or creates the Adinkra profile, then continues.
 export async function oauthFinish(el, _p, q) {
@@ -333,7 +333,7 @@ export async function oauthFinish(el, _p, q) {
     state.user = user;
     renderNav();
     toast(created ? `Akwaaba, ${user.name.split(' ')[0]}! Your account is ready.` : `Welcome back, ${user.name.split(' ')[0]}`, 'ok');
-    const next = homeFor(user, q.next && q.next !== '/trips' ? q.next : null);
+    const next = landingFor(user, q.next && q.next !== '/trips' ? q.next : null);
     go(user.needsProfile ? `/complete-profile?next=${encodeURIComponent(next)}` : next);
   } catch (e) {
     el.innerHTML = `<div style="max-width:420px;margin:24px auto" class="card"><h1>Google sign-in</h1>${errorBox(e)}
@@ -343,6 +343,8 @@ export async function oauthFinish(el, _p, q) {
 
 // One-time step for Google sign-ups: the phone and Ghana Card that normal registration collects.
 export function completeProfile(el, _p, q) {
+  // Only Google sign-ups that still owe a phone number and Ghana Card need this page.
+  if (!state.user.needsProfile) { location.replace(`#${q.next || homeFor()}`); return; }
   el.innerHTML = `
     <div style="max-width:520px;margin:24px auto">
       <form class="card" id="f"><h1>Complete your profile</h1>
@@ -381,7 +383,7 @@ export function login(el, _p, q) {
     state.user = user;
     renderNav();
     toast(`Welcome back, ${user.name.split(' ')[0] === 'Dr.' ? user.name : user.name.split(' ')[0]}`, 'ok');
-    go(homeFor(user, q.next));
+    go(landingFor(user, q.next));
   }, $('#err')));
 }
 

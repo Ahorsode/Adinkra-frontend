@@ -168,6 +168,27 @@ export function modal({ title, body, actions = '' }) {
 }
 export const closeModal = () => document.getElementById('modal').close();
 
+// ---------- Roles & permissions (mirror of the API's hasPerm; the API still enforces them) ----------
+/** Staff portal sections and the permission each needs. */
+export const STAFF_TABS = [
+  ['support', 'Support desk', 'support'],
+  ['gate', 'Gate boarding', 'gate'],
+  ['manifest', 'Manifests', 'gate'],
+  ['bookings', 'Bookings', 'bookings'],
+  ['cargo', 'Cargo intake', 'cargo'],
+  ['ops', 'Flight ops', 'ops'],
+];
+export function can(perm, u = state.user) {
+  if (!u) return false;
+  return u.role === 'admin' || (u.role === 'staff' && (u.permissions || []).includes(perm));
+}
+/** Staff portal sections this user may open (empty for travellers and for staff with no permissions). */
+export const staffTabs = (u = state.user) => STAFF_TABS.filter(([, , p]) => can(p, u));
+export const canSeeAdmin = (u = state.user) => u?.role === 'admin';
+export const canSeeStaff = (u = state.user) => staffTabs(u).length > 0;
+/** Where a user lands after signing in when no other page was asked for. */
+export const homeFor = (u = state.user) => (canSeeAdmin(u) ? '/admin' : canSeeStaff(u) ? '/staff' : '/trips');
+
 // ---------- Router ----------
 const routes = [];
 let cleanup = [];
@@ -203,8 +224,16 @@ export async function navigate() {
       go(`/complete-profile?next=${encodeURIComponent(path)}`);
       return;
     }
-    if (r.roles && !r.roles.includes(state.user?.role)) {
-      el.innerHTML = `<div class="card empty"><h2>Restricted area</h2><p>Your account does not have access to this page.</p><a class="btn" href="#/">Go home</a></div>`;
+    // Sign-in, register and reset pages are only for signed-out visitors.
+    if (r.guestOnly && state.user) {
+      location.replace(`#${homeFor()}`);
+      return;
+    }
+    // Pages a user's role or permissions don't cover are never shown.
+    if ((r.roles && !r.roles.includes(state.user?.role)) || (r.allow && !r.allow(state.user))) {
+      renderNav();
+      document.title = 'Restricted · Adinkra Airways';
+      el.innerHTML = `<div class="card empty"><h2>Restricted area</h2><p>Your account does not have access to this page.</p><a class="btn" href="#${state.user ? homeFor() : '/'}">Go to your home page</a></div>`;
       return;
     }
     renderNav();
@@ -227,7 +256,8 @@ export function renderNav() {
   const u = state.user;
   const { path } = parseHash();
   const link = (href, label) => `<a href="#${href}" class="${path === href || (href !== '/' && path.startsWith(href)) ? 'active' : ''}">${label}</a>`;
-  const isStaff = u && (u.role === 'staff' || u.role === 'admin');
+  // Signed-out visitors don't see links to pages that need an account (footer too).
+  document.querySelectorAll('[data-auth]').forEach((a) => { a.hidden = !u; });
   nav.innerHTML = [
     link('/', 'Book'),
     link('/manage', 'Manage booking'),
@@ -237,8 +267,8 @@ export function renderNav() {
     '<span class="sep"></span>',
     u ? link('/trips', 'My trips') : '',
     u ? link('/support', 'Help') : '',
-    isStaff ? link('/staff', 'Staff') : '',
-    u?.role === 'admin' ? link('/admin', 'Admin') : '',
+    canSeeStaff(u) ? link('/staff', 'Staff') : '',
+    canSeeAdmin(u) ? link('/admin', 'Admin') : '',
     u ? link('/profile', esc(u.name.split(' ')[u.name.startsWith('Dr.') ? 1 : 0])) : '',
     u ? '<button class="linklike" id="logout">Sign out</button>' : link('/login', 'Sign in'),
     u ? '' : link('/register', 'Register'),

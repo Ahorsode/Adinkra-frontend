@@ -1,29 +1,21 @@
 import {
   state, get, post, put, esc, money, fmtTime, fmtDate, fmtDateTime, ago, badge, liveBadge, segBadge, city,
-  $, $$, formData, guard, go, toast, modal, closeModal, onLeave, errorBox, loading, backLink, icon } from '../core.js';
+  $, $$, formData, guard, go, toast, modal, closeModal, onLeave, errorBox, loading, backLink, icon, can, staffTabs } from '../core.js';
 import { cargoTimeline } from './account.js';
 
-const TABS = [
-  ['support', 'Support desk', 'support'],
-  ['gate', 'Gate boarding', 'gate'],
-  ['manifest', 'Manifests', 'gate'],
-  ['bookings', 'Bookings', 'bookings'],
-  ['cargo', 'Cargo intake', 'cargo'],
-  ['ops', 'Flight ops', 'ops'],
-];
-const can = (perm) => state.user.role === 'admin' || state.user.permissions.includes(perm);
-
 export async function staff(el, { tab: t, id }) {
-  const tabs = TABS.filter(([, , p]) => can(p));
-  const tab = t || tabs[0]?.[0];
-  if (!tabs.length) { el.innerHTML = '<div class="card empty">No staff permissions assigned to your account yet.</div>'; return; }
+  // Only the sections this account's permissions cover are listed or reachable (the router already
+  // turned away accounts with none). A link to any other section lands on the first allowed one.
+  const tabs = staffTabs();
+  if (!t || !tabs.some(([k]) => k === t)) { location.replace(`#/staff/${tabs[0][0]}`); return; }
+  const tab = t;
+  const roleLabel = state.user.role === 'admin' ? 'administrator (all sections)' : tabs.map(([, l]) => l).join(', ');
   el.innerHTML = `
-    <div class="page-head"><div><h1>Staff portal</h1><p>Signed in as ${esc(state.user.name)} · ${esc(state.user.permissions.join(', '))}</p></div></div>
-    <nav class="tabs">${tabs.map(([k, l]) => `<a href="#/staff/${k}" class="${k === tab ? 'on' : ''}">${l}</a>`).join('')}</nav>
+    <div class="page-head"><div><h1>Staff portal</h1><p>Signed in as ${esc(state.user.name)} · ${esc(roleLabel)}</p></div></div>
+    ${tabs.length > 1 ? `<nav class="tabs">${tabs.map(([k, l]) => `<a href="#/staff/${k}" class="${k === tab ? 'on' : ''}">${l}</a>`).join('')}</nav>` : ''}
     <div id="pane">${loading()}</div>`;
   const pane = $('#pane');
   const handlers = { support: supportTab, gate: gateTab, manifest: manifestTab, bookings: bookingsTab, cargo: cargoTab, ops: opsTab };
-  if (!tabs.some(([k]) => k === tab)) { pane.innerHTML = errorBox('You do not have permission for this area'); return; }
   try { await handlers[tab](pane, id); } catch (e) { pane.innerHTML = errorBox(e); }
 }
 
@@ -46,7 +38,7 @@ async function supportTicket(pane, ref) {
     ${backLink('#/staff/support', 'All tickets')}
     <div class="split" style="margin-top:12px">
       <div class="card"><div class="row between"><h2 style="margin:0">${esc(t.subject)}</h2>${badge(t.status)}</div>
-        <p class="muted small"><span class="mono">${esc(t.ref)}</span> · ${esc(t.categoryLabel)} · ${esc(t.customer.name)} (${esc(t.customer.email)})${t.pnr ? ` · PNR <a href="#/staff/bookings/${esc(t.pnr)}">${esc(t.pnr)}</a>` : ''}</p>
+        <p class="muted small"><span class="mono">${esc(t.ref)}</span> · ${esc(t.categoryLabel)} · ${esc(t.customer.name)} (${esc(t.customer.email)})${t.pnr ? ` · PNR ${can('bookings') ? `<a href="#/staff/bookings/${esc(t.pnr)}">${esc(t.pnr)}</a>` : `<span class="mono">${esc(t.pnr)}</span>`}` : ''}</p>
         <div class="thread">${t.messages.map((m) => `<div class="msg ${m.author_role}"><div class="meta">${esc(m.author)} · ${fmtDateTime(m.created_at)}</div><p>${esc(m.body)}</p></div>`).join('')}</div>
         <form id="rf" style="margin-top:16px"><div id="err"></div>
           <div class="field"><label>Reply to customer</label><textarea name="message" id="reply"></textarea></div>
